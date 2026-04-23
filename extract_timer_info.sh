@@ -30,4 +30,4 @@ for FILE in $FILES; do
   fi
 done
 
-sort -k3,3 -k2,2 "$OUTPUT_FILE" > "${OUTPUT_FILE}.sorted"
+grep -v '^$' "$OUTPUT_FILE" | sort -k3,3 -k2,2 > "${OUTPUT_FILE}.sorted"
