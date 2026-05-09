@@ -8,7 +8,7 @@
 # results are stored under: $RCHK/test/results/<test-name>/<tool>/
 
 if [ X"$1" == X ] ; then
-  echo "usage: $0 -t <test-name> [tool1 tool2 ...]" >&2
+  echo "usage: $0 <test-name> [tool1 tool2 ...]" >&2
   exit 2
 fi
 TEST_NAME="$1"

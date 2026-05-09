@@ -1,0 +1,146 @@
+#! /bin/bash
+
+# runs rchk tools on installed R packages (those not included in the R distribution)
+#
+# the packages have to be installed with cmpconfig.inc included into shell
+#   they are placed into packages/lib and their build dirs are kept in packages/build
+#
+# packages can also be installed using install_package_libs from utils.r, then only their
+#   shared libraries are installed (--libs-only) into packages/libsonly
+#
+# this script is to be run from the R source directory
+#
+# Usage:
+#
+#   check_package_et.sh <test-name> <results-csv-file-name> <num-runs> <package-name> [tool1 tool2 ...]
+#
+# Examples:
+#
+#   check png package with default tools:   ./check_package_et.sh test results.csv 10 png
+#   check ggplot2 package with bcheck tool: ./check_package_et.sh test results.csv 10 ggplot2 bcheck
+#
+# The results are stored in the CSV file.
+
+if [ X"$1" == X ] || [ X"$2" == X ] || [ X"$3" == X ] ; then
+  echo "usage: $0 <test-name> <results-csv-file-name> <num-runs> <package-name> [tool1 tool2 ...]" >&2
+  exit 2
+fi
+TEST_NAME="$1"
+CSV_FILE="$2"
+NUM_RUNS="$3"
+shift 3
+
+if [ ! -r $RCHK/scripts/config.inc ] ; then
+  echo "Please set RCHK variables (scripts/config.inc)" >&2
+  exit 2
+fi
+
+. $RCHK/scripts/common.inc
+
+if ! check_config ; then
+  exit 2
+fi
+
+if [ ! -r ./src/main/R.bin ] && [ ! -r ./build/lib/R/bin/exec/R ] ; then
+  echo "This script has to be run from the root of R source directory with bitcode files (e.g. src/main/R.bin exists) or R binary installation (./build/lib/R/bin/exec/R exists)." >&2
+  exit 2
+fi
+
+. $RCHK/scripts/cmpconfig.inc
+
+PKGDIR=$R_LIBS
+PKGARG=$1
+
+if [ "X$PKGARG" != X ] ; then
+  PKGDIR=${R_LIBSONLY}/$PKGARG
+  if [ ! -d $PKGDIR ] ; then
+    PKGDIR=$R_LIBS/$PKGARG
+    if [ ! -d $PKGDIR ] ; then
+      echo "Cannot find package $PKGARG ($PKGDIR does not exist)." >&2
+      exit 2
+    fi
+  fi
+fi
+
+shift 1
+if [ X"$*" == X ] ; then
+  TOOLS="bcheck maacheck fficheck"
+else
+  TOOLS="$*"
+fi
+
+for T in $TOOLS ; do
+  if [ ! -x $RCHK/src/$T ] ; then
+    echo "Please set RCHK variables (scripts/config.inc) and RCHK installation - cannot find tool $T." >&2
+    exit 2
+  fi
+done
+
+
+# find or extract R bitcode file
+
+RBC=nonexistent
+if [ -r ./src/main/R.bin.bc ] ; then
+  RBC=./src/main/R.bin.bc
+elif [ -r ./build/R.bc ] ; then
+  RBC=./build/R.bc
+elif [ -r ./src/main/R.bin ] ; then
+  $WLLVM/extract-bc ./src/main/R.bin
+  RBC=./src/main/R.bin.bc
+elif [ -r ./build/lib/R/bin/exec/R ] ; then
+  $WLLVM/extract-bc ./build/lib/R/bin/exec/R
+  mv ./build/lib/R/bin/exec/R.bc ./build
+  RBC=./build/R.bc
+fi
+
+if [ ! -r $RBC ] ; then
+  echo "Cannot find R bitcode file ($RBC does not exist)." >&2
+  exit 2
+fi
+
+# extract package bitcode if needed
+
+find $PKGDIR -name "*.so" | while read SOF ; do
+  if [ ! -r $SOF.bc ] || [ $SOF -nt $SOF.bc ] ; then
+    $WLLVM/extract-bc $SOF
+  fi
+done
+
+# setup result folder
+
+RESULT_FOLDER="$RCHK/test/results/$TEST_NAME"
+mkdir -p "$RESULT_FOLDER"
+
+# ensure cache
+
+if [ -n "$RCHK_NO_CACHE" ] ; then
+  CACHE_ARGS=""
+else
+  CACHE_FILE="$RBC".cache
+  . $RCHK/scripts/ensure_cache.sh "$RBC" "$CACHE_FILE"
+  if [ $? -ne 0 ] ; then
+    echo "Cache generation failed. Aborting." >&2
+    exit 2
+  fi
+  CACHE_ARGS="--cache $CACHE_FILE"
+fi
+
+# run the tools
+
+for T in $TOOLS ; do
+  mkdir -p "$RESULT_FOLDER/$T"
+  for RUN in $(seq 1 $NUM_RUNS) ; do
+
+    find $PKGDIR -name "*.bc" | grep -v '\.o\.bc' | while read F ; do
+      FOUT=`echo $F | sed -e 's/\.bc$/.'$T'/g'`
+
+      echo -e "Running $T on $F"
+      TIME_TMP=$(mktemp)
+      /usr/bin/time -f '%e %M' -o "$TIME_TMP" -- $RCHK/src/$T $CACHE_ARGS $RBC $F >"$FOUT" 2>&1
+      read -r TIME_SEC MAX_RSS_KB < "$TIME_TMP"
+      rm -f "$TIME_TMP"
+      echo "${RUN};${PKGARG};${T};${TIME_SEC};${MAX_RSS_KB}" >>"$CSV_FILE"
+      cp $FOUT "$RESULT_FOLDER/$T/$(basename "$FOUT")"
+    done
+  done
+done

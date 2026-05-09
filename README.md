@@ -15,7 +15,7 @@ RCHK_NO_CACHE=1 ../test/check_r_extract.sh llvm22 errcheck symcheck sfpcheck csf
 
 Create llvm22-cache results (with cache):
 ```sh
-../test/check_r_extract.sh llvm22 errcheck symcheck sfpcheck csfpcheck maacheck bcheck ueacheck alloccheck glcheck veccheck cgcheck fficheck
+../test/check_r_extract.sh llvm22-cache errcheck symcheck sfpcheck csfpcheck maacheck bcheck ueacheck alloccheck glcheck veccheck cgcheck fficheck
 ```
 
 ### Timing

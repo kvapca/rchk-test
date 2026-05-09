@@ -19,6 +19,7 @@ fi
 
 for T in $TOOLS ; do
   rm -f ./src/main/R.bin.$T
+
   find . -name "*.bc" | grep -v R.bin.bc | grep -v '\.o\.bc' | grep -v '\.svn' | grep -v '^./packages' | while read F ; do
     FOUT=`echo $F | sed -e 's/\.bc$/.'$T'/g'`
     rm -f $FOUT
