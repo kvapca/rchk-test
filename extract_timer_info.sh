@@ -8,7 +8,6 @@ if [ ! -d "$TARGET_DIR" ]; then
 fi
 
 FILES=$(ls "$TARGET_DIR"/R.bin.* "$TARGET_DIR"/survival.so.* 2>/dev/null)
-echo $FILES
 
 # Keep only lines containing "[Timer]". change the original files. check is filename isnt this script itself
 for FILE in $FILES; do
